@@ -1,54 +1,140 @@
-import streamlit as st 
+#Import all the library
+from dotenv import load_dotenv
+import os
+import google.generativeai as genai
+from PIL import Image
+import streamlit as st
 
-def get_initial_details():
-    destination = st.text_input("Where do you want to go?")
-    budget = st.selectbox("What's your budget?", ["Low", "Moderate", "Luxury"])
-    duration = st.number_input("How many days will your trip last?", min_value=1, step=1)
-    purpose = st.selectbox("What’s the purpose of your trip?", ["Leisure", "Adventure", "Cultural", "Business"])
-    preferences = st.text_area("Any special preferences (e.g., food, activities, mobility needs)?")
-    
-    if st.button("Next"): 
-        return destination, budget, duration, purpose, preferences
-    return None, None, None, None, None
+#Load the API Key
+load_dotenv()
+genai.configure(api_key = os.getenv("GOOGLE_API_KEY"))
 
-def refine_preferences():
-    spots = st.selectbox("Do you prefer exploring popular spots or hidden gems?", ["Popular Spots", "Hidden Gems", "Both"])
-    pace = st.selectbox("Do you prefer a relaxed or action-packed itinerary?", ["Relaxed", "Action-packed"])
-    food_pref = st.text_input("Any dietary restrictions or food preferences?")
-    accommodation = st.selectbox("What type of accommodation do you prefer?", ["Budget", "Mid-range", "Luxury"])
-    
-    if st.button("Generate Itinerary"):
-        return spots, pace, food_pref, accommodation
-    return None, None, None, None
+#Function to load Google Gemini Vision Model and get response
+def get_response_image(image, prompt):
+    model = genai.GenerativeModel('gemini-pro-vision')
+    response = model.generate_content([image[0], prompt])
+    return response.text
 
-def generate_itinerary(destination, duration, budget, purpose, preferences, spots, pace, food_pref, accommodation):
-    itinerary = f"""
-    **Your {duration}-day Itinerary to {destination}:**
+#Function to load Google Gemini Pro Model and get response
+def get_response(prompt, input):
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content([prompt, input])
+    return response.text
+
+#Prep Image Data
+def prep_image(uploaded_file):
+    #Check if there is any data
+    if uploaded_file is not None:
+        bytes_data = uploaded_file.getvalue()
+
+        #Get the image part information
+        image_parts = [
+            {
+                "mime_type": uploaded_file.type,
+                "data": bytes_data
+            }
+        ]
+        return image_parts
+    else:
+        raise FileNotFoundError("No File is uploaded!")
     
-    - Budget: {budget}
-    - Purpose: {purpose}
-    - Preferences: {preferences}
-    - Accommodation: {accommodation}
-    
-    **Day 1:**
-    - Morning: Explore top attractions
-    - Afternoon: Try local cuisine at a popular spot
-    - Evening: Relax with a scenic view
-    
-    **Day 2:**
-    - Morning: Cultural tour
-    - Afternoon: Adventure activity
-    - Evening: Fine dining experience
-    
-    Enjoy your trip!
+#Initialize the streamlit app
+#st.set_page_config(page_title="Planner: Discover and Plan your Culinary Adventures!")
+st.image('logo.jpg', width=70)
+st.header("Planner: Discover and Plan your Culinary Adventures!")
+
+
+#Creating radio section choices
+section_choice = st.radio("Choose Section:", ("Location Finder", "Trip Planner", "Weather Forecasting", "Restaurant & Hotel Planner"))
+###########################################################################################
+#If the choice is location finder
+if section_choice == "Location Finder":
+    upload_file = st.file_uploader("Choose an image", type = ["jpg", "jpeg", "png"])
+    image = ""
+    if upload_file is not None:
+        image = Image.open(upload_file)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
+    #Prompt Template
+    input_prompt_loc = """
+    You are an expert Tourist Guide. As a expert your job is to provide summary about the place and,
+    - Location of the place,
+    - State & Capital
+    - Cordinates of the place
+    - Some popular places nearby
+    Retun the response using markdown.
     """
-    st.markdown(itinerary)
 
-if __name__ == "__main__":
-    st.title("AI Travel Itinerary Planner")
-    destination, budget, duration, purpose, preferences = get_initial_details()
+    #Button
+    submit = st.button("Get Location!")
+    if submit:
+        image_data = prep_image(upload_file)
+        response = get_response_image(image_data, input_prompt_loc)
+        st.subheader("Tour Bot: ")
+        st.write(response)
+###########################################################################################
+#If the choice is trip planner
+if section_choice == "Trip Planner":
 
-    if destination:
-        spots, pace, food_pref, accommodation = refine_preferences()
-        if spots:
-            generate_itinerary(destination, duration, budget, purpose, preferences, spots, pace, food_pref, accommodation)
+    #Prompt Template
+    input_prompt_planner = """
+    You are an expert Tour Planner. Your job is to provide recommendations and plan for given location for giner number of days,
+    even if number of days is not provided.
+    Also, suggest hidden secrets, hotels, and beautiful places we shouldn't forget to visit
+    Also tell best month to visit given place.
+    Retun the response using markdown.
+    """
+
+    #Input
+    input_plan = st.text_area("Provide location and number of days to obtain itinerary plan!")
+    #Button
+    submit1 = st.button("Plan my Trip!")
+    if submit1:
+        response = get_response(input_prompt_planner, input_plan)
+        st.subheader("Planner Bot: ")
+        st.write(response)
+###########################################################################################
+#If the choice is Weather Forecasting
+if section_choice == "Weather Forecasting":
+
+    #Prompt Template
+    input_prompt_planner = """
+    You are an expert weather forecaster. Your job is to provide forecast for given place and you have to provide for next 7 days,
+    forecast also, from the current date.
+    - Provide Precipitation
+    - Provide Humidity
+    - Provide Wind
+    - Provide Air Quality
+    - Provide Cloud Cover
+    Retun the response using markdown.
+    """
+    #Input
+    input_plan = st.text_area("Provide location to forecast weather!")
+    #Button
+    submit1 = st.button("Forecast Weather!")
+    if submit1:
+        response = get_response(input_prompt_planner, input_plan)
+        st.subheader("Weather Bot: ")
+        st.write(response)
+
+###########################################################################################
+#If the choice is Restaurant & Hotel Planner
+if section_choice == "Restaurant & Hotel Planner":
+
+    #Prompt Template
+    input_prompt_planner = """
+    You are an expert Restaurant & Hotel Planner. 
+    Your job is to provide Restaurant & Hotel for given place and you have to provide not very expensive and not very cheap,
+    - Provide rating of the restaurant/hotel
+    - Top 5 restaurants with address and average cost per cuisine
+    - Top 5 hotels with address and average cost per night
+    Retun the response using markdown.
+    """
+    #Input
+    input_plan = st.text_area("Provide location to find Hotel & Restaurants!")
+    #Button
+    submit1 = st.button("Find Restaurant & Hotel!")
+    if submit1:
+        response = get_response(input_prompt_planner, input_plan)
+        st.subheader("Acomodation Bot: ")
+        st.write(response)
